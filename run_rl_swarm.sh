@@ -237,7 +237,7 @@ read -p "Enter choice number [1]: " choice
 choice=${choice:-1}
 BACKEND="${OPTIONS[$((choice-1))]}"
 
-CONFIG_FILE="$ROOT/configs/rg-swarm.yaml"
+CONFIG_FILE="$HOME/rl-swarm/rgym_exp/config/rg-swarm.yaml"
 
 USE_VLLM="false"
 QUANTIZATION="none"
@@ -291,16 +291,20 @@ case "$BACKEND" in
         ;;
 esac
 
-export USE_VLLM="$USE_VLLM"
-export QUANTIZATION="$QUANTIZATION"
-export FORCE_CPU="$FORCE_CPU"
-export DTYPE="$DTYPE"
+if ! command -v yq &>/dev/null; then
+    pip install yq
+fi
 
-echo_green "Environment variables set:"
-echo "  USE_VLLM: $USE_VLLM"
-echo "  QUANTIZATION: $QUANTIZATION"
-echo "  FORCE_CPU: $FORCE_CPU"
-echo "  DTYPE: $DTYPE"
+yq -i -y ".grpo_trainer.use_vllm = $USE_VLLM" "$CONFIG_FILE"
+yq -i -y ".grpo_trainer.quantization = \"$QUANTIZATION\"" "$CONFIG_FILE"
+yq -i -y ".grpo_trainer.force_cpu = $FORCE_CPU" "$CONFIG_FILE"
+yq -i -y ".grpo_trainer.dtype = \"$DTYPE\"" "$CONFIG_FILE"
+
+echo_green "Config updated:"
+echo "  use_vllm: $USE_VLLM"
+echo "  quantization: $QUANTIZATION"
+echo "  force_cpu: $FORCE_CPU"
+echo "  dtype: $DTYPE"
 
 echo -en $GREEN_TEXT
 read -p ">> Would you like to push models you train in the RL swarm to the Hugging Face Hub? [y/N] " yn
