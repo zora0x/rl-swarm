@@ -26,20 +26,6 @@ IDENTITY_PATH=${IDENTITY_PATH:-$DEFAULT_IDENTITY_PATH}
 DOCKER=${DOCKER:-""}
 GENSYN_RESET_CONFIG=${GENSYN_RESET_CONFIG:-""}
 
-# Bit of a workaround for the non-root docker container.
-if [ -n "$DOCKER" ]; then
-    volumes=(
-        /home/gensyn/rl_swarm/modal-login/temp-data
-        /home/gensyn/rl_swarm/keys
-        /home/gensyn/rl_swarm/configs
-        /home/gensyn/rl_swarm/logs
-    )
-
-    for volume in ${volumes[@]}; do
-        sudo chown -R 1001:1001 $volume
-    done
-fi
-
 # Will ignore any visible GPUs if set.
 CPU_ONLY=${CPU_ONLY:-""}
 
@@ -68,9 +54,6 @@ ROOT_DIR="$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)"
 # Function to clean up the server process upon exit
 cleanup() {
     echo_green ">> Shutting down trainer..."
-
-    # Remove modal credentials if they exist
-    rm -r $ROOT_DIR/modal-login/temp-data/*.json 2> /dev/null || true
 
     # Kill all processes belonging to this script's process group
     kill -- -$$ || true
@@ -115,7 +98,7 @@ if [ "$CONNECT_TO_TESTNET" = true ]; then
         fi
         [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
         [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-        nvm install node
+        nvm install 20
     else
         echo "Node.js is already installed: $(node -v)"
     fi
@@ -199,7 +182,7 @@ echo_green ">> Getting requirements..."
 pip install --upgrade pip
 
  echo_green ">> Installing GenRL..."
-pip install gensyn-genrl==${GENRL_TAG}
+pip install "git+https://github.com/zora0x/genrl-opt.git@opt"
 pip install reasoning-gym>=0.1.20 # for reasoning gym env
 pip install hivemind@git+https://github.com/gensyn-ai/hivemind@639c964a8019de63135a2594663b5bec8e5356dd # We need the latest, 1.1.11 is broken
 
@@ -230,6 +213,94 @@ fi
 
 echo_green ">> Done!"
 
+# ===================== BACKEND & DTYPE INTERACTION SECTION =====================
+# Hardware detection
+HAS_GPU=0
+if command -v nvidia-smi &>/dev/null && nvidia-smi -L | grep -q 'GPU'; then
+    HAS_GPU=1
+fi
+
+echo
+echo_blue "Choose model backend:"
+OPTIONS=("none_cpu" "cpu_int8")
+OPTION_LABELS=("CPU (full precision, force_cpu)" "CPU (int8 quantization, force_cpu)")
+if [ $HAS_GPU -eq 1 ]; then
+    OPTIONS+=("vllm" "bnb_4bit" "bnb_8bit" "none_gpu")
+    OPTION_LABELS+=("vLLM (fastest, GPU only)" "bitsandbytes 4-bit (GPU only)" "bitsandbytes 8-bit (GPU only)" "GPU (full precision, no quantization)")
+fi
+
+for i in "${!OPTIONS[@]}"; do
+    echo "  $((i+1))) ${OPTION_LABELS[$i]}"
+done
+
+read -p "Enter choice number [1]: " choice
+choice=${choice:-1}
+BACKEND="${OPTIONS[$((choice-1))]}"
+
+CONFIG_FILE="$ROOT/configs/rg-swarm.yaml"
+
+USE_VLLM="false"
+QUANTIZATION="none"
+FORCE_CPU="false"
+DTYPE="float32"
+
+if [[ "$BACKEND" == "vllm" || "$BACKEND" == "bnb_4bit" || "$BACKEND" == "bnb_8bit" || "$BACKEND" == "none_gpu" ]]; then
+    echo -en "$GREEN_TEXT"
+    read -p "Which data type for model weights? (1) float32 (safe, default), (2) float16 (faster, more memory-efficient), (3) bfloat16 (best of both): " dtype_choice
+    echo -en "$RESET_TEXT"
+    case "$dtype_choice" in
+        2) DTYPE="float16";;
+        3) DTYPE="bfloat16";;
+        *) DTYPE="float32";;
+    esac
+fi
+
+case "$BACKEND" in
+    "vllm")
+        USE_VLLM="true"
+        QUANTIZATION="none"
+        FORCE_CPU="false"
+        pip install vllm
+        ;;
+    "bnb_4bit")
+        USE_VLLM="false"
+        QUANTIZATION="bnb_4bit"
+        FORCE_CPU="false"
+        pip install bitsandbytes
+        ;;
+    "bnb_8bit")
+        USE_VLLM="false"
+        QUANTIZATION="bnb_8bit"
+        FORCE_CPU="false"
+        pip install bitsandbytes
+        ;;
+    "none_gpu")
+        USE_VLLM="false"
+        QUANTIZATION="none"
+        FORCE_CPU="false"
+        ;;
+    "none_cpu")
+        USE_VLLM="false"
+        QUANTIZATION="none"
+        FORCE_CPU="true"
+        ;;
+    "cpu_int8")
+        USE_VLLM="false"
+        QUANTIZATION="cpu_int8"
+        FORCE_CPU="true"
+        ;;
+esac
+
+export USE_VLLM="$USE_VLLM"
+export QUANTIZATION="$QUANTIZATION"
+export FORCE_CPU="$FORCE_CPU"
+export DTYPE="$DTYPE"
+
+echo_green "Environment variables set:"
+echo "  USE_VLLM: $USE_VLLM"
+echo "  QUANTIZATION: $QUANTIZATION"
+echo "  FORCE_CPU: $FORCE_CPU"
+echo "  DTYPE: $DTYPE"
 
 echo -en $GREEN_TEXT
 read -p ">> Would you like to push models you train in the RL swarm to the Hugging Face Hub? [y/N] " yn

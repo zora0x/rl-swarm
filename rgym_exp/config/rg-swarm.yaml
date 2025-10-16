@@ -17,7 +17,17 @@ training:
   num_generations: 2
   num_transplant_trees: 2
   seed: 42
-  dtype: 'float32'
+  dtype: ${grpo_trainer.dtype}
+
+grpo_trainer:
+  use_vllm: ${oc.env:USE_VLLM,false}
+  quantization: ${oc.env:QUANTIZATION,"none"}
+  force_cpu: ${oc.env:FORCE_CPU,false}
+  dtype: ${oc.env:DTYPE,"float32"}
+  gpu_memory_utilization: ${oc.env:GPU_MEMORY_UTIL,0.75}
+  temperature: ${oc.env:VLLM_TEMPERATURE,0.7}
+  top_p: ${oc.env:VLLM_TOP_P,1.0}
+  max_tokens: ${oc.env:VLLM_MAX_TOKENS,512}
 
 blockchain:
   alchemy_url: "https://gensyn-testnet.g.alchemy.com/public"
@@ -72,7 +82,14 @@ game_manager:
         pretrained_model_name_or_path: ${oc.env:MODEL_NAME, ${gpu_model_choice:${default_large_model_pool},${default_small_model_pool}}} 
     config:
       _target_: genrl.trainer.grpo_trainer.GRPOTrainerConfig
-      dtype: ${training.dtype}
+      dtype: ${grpo_trainer.dtype}
+      quantization: ${grpo_trainer.quantization}
+      use_vllm: ${grpo_trainer.use_vllm}
+      force_cpu: ${grpo_trainer.force_cpu}
+      gpu_memory_utilization: ${grpo_trainer.gpu_memory_utilization}
+      temperature: ${grpo_trainer.temperature}
+      top_p: ${grpo_trainer.top_p}
+      max_tokens: ${grpo_trainer.max_tokens}
       epsilon: 0.2
       epsilon_high: 0.28
       num_generations: ${training.num_generations}
@@ -82,7 +99,7 @@ game_manager:
   data_manager:
     _target_: rgym_exp.src.data.ReasoningGymDataManager
     yaml_config_path: "rgym_exp/src/datasets.yaml"
-    num_train_samples: 2
+    num_train_samples: ${oc.env:NUM_TRAIN_SAMPLES, 2}
     num_evaluation_samples: 0
     num_generations: ${training.num_generations}
     system_prompt_id: 'default'
