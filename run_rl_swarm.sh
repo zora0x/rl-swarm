@@ -222,8 +222,8 @@ fi
 
 echo
 echo_blue "Choose model backend:"
-OPTIONS=("none_cpu" "cpu_int8")
-OPTION_LABELS=("CPU (full precision, force_cpu)" "CPU (int8 quantization, force_cpu)")
+OPTIONS=("none_cpu" "onnx_int8" "openvino_int8")
+OPTION_LABELS=("CPU (full precision, force_cpu)" "CPU (int8 quantization, ONNX backend)" "CPU (int8 quantization, OpenVINO backend)"
 if [ $HAS_GPU -eq 1 ]; then
     OPTIONS+=("vllm" "bnb_4bit" "bnb_8bit" "none_gpu")
     OPTION_LABELS+=("vLLM (fastest, GPU only)" "bitsandbytes 4-bit (GPU only)" "bitsandbytes 8-bit (GPU only)" "GPU (full precision, no quantization)")
@@ -284,10 +284,17 @@ case "$BACKEND" in
         QUANTIZATION="none"
         FORCE_CPU="true"
         ;;
-    "cpu_int8")
+    "onnx_int8")
         USE_VLLM="false"
-        QUANTIZATION="cpu_int8"
+        QUANTIZATION="onnx_int8"
         FORCE_CPU="true"
+        pip install "optimum[onnxruntime]"
+        ;;
+    "openvino_int8")
+        USE_VLLM="false"
+        QUANTIZATION="openvino_int8"
+        FORCE_CPU="true"
+        pip install "optimum[openvino]"
         ;;
 esac
 
