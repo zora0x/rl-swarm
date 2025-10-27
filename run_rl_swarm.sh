@@ -222,7 +222,7 @@ fi
 
 echo
 echo_blue "Choose model backend:"
-OPTIONS=("none_cpu" "onnx_int8" "openvino_int8")
+OPTIONS=("none_cpu" "onnx_int8" "openvino_int8)")
 OPTION_LABELS=("CPU (full precision, force_cpu)" "CPU (int8 quantization, ONNX backend)" "CPU (int8 quantization, OpenVINO backend)"
 if [ $HAS_GPU -eq 1 ]; then
     OPTIONS+=("vllm" "bnb_4bit" "bnb_8bit" "none_gpu")
